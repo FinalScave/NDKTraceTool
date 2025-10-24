@@ -1,0 +1,131 @@
+enum OsFamily {
+    WINDOWS("windows"), MAC("mac"), LINUX("linux")
+    final String name
+    OsFamily(String name) {
+        this.name = name
+    }
+}
+
+OsFamily getCurrentOs() {
+    String osName = System.getProperty("os.name").toLowerCase()
+    if (osName.contains("windows")) {
+        return OsFamily.WINDOWS
+    } else if (osName.contains("mac")) {
+        return OsFamily.MAC
+    } else {
+        return OsFamily.LINUX
+    }
+}
+
+String getCompatibleVersion(String version) {
+    // 确保版本号符合jpackage要求
+    def cleanVersion = (version ?: '1.0.0').replaceAll('-SNAPSHOT', '')
+    def parts = cleanVersion.split('\\.')
+    if (parts.length == 1) {
+        return "${parts[0]}.0.0"
+    } else if (parts.length == 2) {
+        return "${parts[0]}.${parts[1]}.0"
+    } else {
+        return cleanVersion
+    }
+}
+
+File getIconFile(OsFamily os) {
+    def iconDir = file("${projectDir}/src/main/resources/icons")
+    switch (os) {
+        case OsFamily.WINDOWS:
+            return new File(iconDir, "app.ico")
+        case OsFamily.MAC:
+            return new File(iconDir, "app.icns")
+        default:
+            return new File(iconDir, "app.png")
+    }
+}
+
+def registerJpackageTask(String name, String type, String destSubdir, List<String> extraArgs) {
+    tasks.register(name, Exec) {
+        dependsOn tasks.named('installDist')
+        group = 'build'
+        description = "Packages the application as ${type ?: 'native'} installer using jpackage."
+
+        doFirst {
+            def installDir = tasks.named('installDist').get().destinationDir
+            def mainJar = fileTree("${installDir}/lib").filter { it.name.endsWith('.jar') }.files.first()
+
+            List<String> jpackageArgs = [
+                    '--name', 'NDKTraceTool',
+                    '--input', "${installDir}/lib",
+                    '--main-jar', mainJar.name,
+                    '--main-class', application.mainClass.get(),
+                    '--dest', "${buildDir}/dist/${destSubdir ?: 'default'}",
+                    '--vendor', 'Scave',
+                    '--app-version', getCompatibleVersion(project.version),
+                    '--verbose'
+            ]
+
+            if (type) {
+                jpackageArgs.addAll(['--type', type])
+            }
+
+            jpackageArgs.addAll(extraArgs)
+
+            def iconFile = getIconFile(getCurrentOs())
+            if (iconFile.exists()) {
+                jpackageArgs.addAll(['--icon', iconFile.absolutePath])
+            }
+            commandLine 'jpackage'
+            args jpackageArgs
+
+            println "打包类型: ${type ?: 'default'}"
+            println "执行命令: jpackage ${jpackageArgs.join(' ')}"
+        }
+    }
+}
+
+registerJpackageTask('jpackageWindows', 'exe', 'windows', [
+        '--win-dir-chooser',
+        '--win-menu',
+        '--win-shortcut',
+        '--win-per-user-install'
+])
+registerJpackageTask('jpackageMac', 'dmg', 'mac', [
+        '--mac-package-identifier', 'com.scave.ndktracetool',
+        '--mac-package-name', 'NDKTraceTool'
+])
+
+registerJpackageTask('jpackageLinuxDeb', 'deb', 'linux/deb', [
+        '--linux-shortcut',
+        '--linux-menu-group', 'Development'
+])
+
+registerJpackageTask('jpackageLinuxRpm', 'rpm', 'linux/rpm', [
+        '--linux-shortcut',
+        '--linux-menu-group', 'Development'
+])
+registerJpackageTask('jpackageLinuxAppImage', 'app-image', 'linux/appimage', [])
+
+
+tasks.register('jpackage') {
+    group = 'build'
+    description = 'Packages the application for the current platform.'
+
+    doLast {
+        def os = getCurrentOs()
+        def taskName
+
+        switch (os) {
+            case OsFamily.WINDOWS:
+                taskName = 'jpackageWindows'
+                break
+            case OsFamily.MAC:
+                taskName = 'jpackageMac'
+                break
+            case OsFamily.LINUX:
+                taskName = 'jpackageLinuxDeb'
+                break
+        }
+
+        println "检测到操作系统: ${os.name}, 执行任务: ${taskName}"
+        tasks.named(taskName).get().exec()
+    }
+}

@@ -3,11 +3,18 @@ plugins {
 }
 
 application {
-    mainClass = "com.scave.ndktrace"
+    mainClass = "com.scave.ndktrace.Main"
+}
+
+java {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
 }
 
 group = "com.scave"
 version = "1.0.0"
+
+apply from: 'jpackage.gradle'
 
 repositories {
     maven { url 'https://maven.aliyun.com/repository/public/' }
@@ -25,6 +32,6 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.test {
+test {
     useJUnitPlatform()
 }
