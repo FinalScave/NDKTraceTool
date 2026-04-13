@@ -57,7 +57,7 @@ def registerJpackageTask(String name, String type, String destSubdir, List<Strin
                     '--input', "${installDir}/lib",
                     '--main-jar', mainJar.name,
                     '--main-class', application.mainClass.get(),
-                    '--dest', "${buildDir}/dist/${destSubdir ?: 'default'}",
+                    '--dest', "${projectDir}/release",
                     '--vendor', 'Scave',
                     '--app-version', getCompatibleVersion(project.version),
                     '--verbose'
